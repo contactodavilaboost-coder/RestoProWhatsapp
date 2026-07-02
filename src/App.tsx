@@ -33,6 +33,10 @@ export default function App() {
 
     useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        return; // Ignore these events so the app doesn't reset when changing tabs
+      }
+      
       if (session?.user) {
         setIsLoadingSheet(true);
         try {
