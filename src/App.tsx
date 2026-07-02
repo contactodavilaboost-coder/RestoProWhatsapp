@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, setDoc, updateDoc, getDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { supabase, handleSupabaseError as handleFirestoreError, OperationType } from './supabase';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import POS from './components/POS';
@@ -33,58 +31,35 @@ export default function App() {
 
   const prevOrdersRef = useRef<Order[]>();
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+    useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
         setIsLoadingSheet(true);
         try {
-          const userEmail = (firebaseUser.email || '').toLowerCase().trim();
+          const userEmail = (session.user.email || '').toLowerCase().trim();
           
-          // 1. Intentar cargar el documento del usuario por ID de correo
-          const userDocRef = doc(db, 'users', userEmail);
-          const userDoc = await getDoc(userDocRef);
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', userEmail)
+            .single();
           
-          // 2. Intentar cargar el documento por ID de uid (compatibilidad heredada)
-          const fallbackDocRef = doc(db, 'users', firebaseUser.uid);
-          const fallbackDoc = await getDoc(fallbackDocRef);
-          
-          const foundDoc = userDoc.exists() ? userDoc : (fallbackDoc.exists() ? fallbackDoc : null);
-          
-          let role: 'admin' | 'waiter' | 'chef' = 'waiter';
-          let displayName = firebaseUser.displayName || 'Usuario';
+          let role: 'admin' | 'waiter' | 'chef' | 'bartender' = 'waiter';
+          let displayName = session.user.user_metadata?.full_name || 'Usuario';
           let isAuthorized = false;
-          let finalUserData: User;
+          let finalUserData: User | null = null;
 
-          if (foundDoc) {
-            const data = foundDoc.data();
-            role = data.role;
-            displayName = data.name || displayName;
+          if (userData) {
+            role = userData.role as any;
+            displayName = userData.name || displayName;
             isAuthorized = true;
-            
             finalUserData = {
-              id: firebaseUser.uid,
+              id: session.user.id,
               name: displayName,
               role: role,
-              pin: data.pin || '0000'
+              pin: userData.pin || '0000'
             };
-
-            // Sincronizar el UID en el documento de Firestore si no está guardado aún
-            if (data.uid !== firebaseUser.uid) {
-              await updateDoc(foundDoc.ref, { uid: firebaseUser.uid });
-            }
-
-            // Asegurar que también existe el documento duplicado con ID de UID para robustez en reglas de seguridad
-            const uidDocRef = doc(db, 'users', firebaseUser.uid);
-            await setDoc(uidDocRef, {
-              name: displayName,
-              email: userEmail,
-              role: role,
-              uid: firebaseUser.uid,
-              pin: data.pin || '0000',
-              createdAt: data.createdAt || Date.now()
-            }, { merge: true });
           } else {
-            // Verificar si es uno de los administradores hardcodeados para autoprovisionar
             const isBootstrappedAdmin = 
               userEmail === 'davilacamacho@gmail.com' || 
               userEmail === 'veronicaarcaya2015@gmail.com' || 
@@ -95,38 +70,26 @@ export default function App() {
               role = 'admin';
               isAuthorized = true;
               
-              // Crear su registro directamente en Firestore para no tener problemas de permisos (ID correo)
-              const newAdminDocRef = doc(db, 'users', userEmail);
-              await setDoc(newAdminDocRef, {
+              const { error: insertError } = await supabase.from('users').insert({
+                id: session.user.id,
                 name: displayName,
                 email: userEmail,
-                role: 'admin',
-                uid: firebaseUser.uid,
-                createdAt: Date.now()
-              });
-
-              // Crear su registro duplicado directamente con ID de UID
-              const newAdminUidRef = doc(db, 'users', firebaseUser.uid);
-              await setDoc(newAdminUidRef, {
-                name: displayName,
-                email: userEmail,
-                role: 'admin',
-                uid: firebaseUser.uid,
-                createdAt: Date.now()
-              });
-
-              finalUserData = {
-                id: firebaseUser.uid,
-                name: displayName,
                 role: 'admin',
                 pin: '0000'
-              };
-            } else {
-              isAuthorized = false;
+              });
+
+              if (!insertError) {
+                finalUserData = {
+                  id: session.user.id,
+                  name: displayName,
+                  role: 'admin',
+                  pin: '0000'
+                };
+              }
             }
           }
 
-          if (!isAuthorized) {
+          if (!isAuthorized || !finalUserData) {
             setBlockedEmail(userEmail);
             setCurrentUser(null);
             setIsLoadingSheet(false);
@@ -134,26 +97,21 @@ export default function App() {
           }
 
           setBlockedEmail('');
-          setCurrentUser(finalUserData!);
-          if (finalUserData!.role === 'admin') setActiveTab('dashboard');
-          else if (finalUserData!.role === 'waiter') setActiveTab('pos');
-          else if (finalUserData!.role === 'chef') setActiveTab('kitchen');
-          else if (finalUserData!.role === 'bartender') setActiveTab('barra');
+          setCurrentUser(finalUserData);
+          if (finalUserData.role === 'admin') setActiveTab('dashboard');
+          else if (finalUserData.role === 'waiter') setActiveTab('pos');
+          else if (finalUserData.role === 'chef') setActiveTab('kitchen');
+          else if (finalUserData.role === 'bartender') setActiveTab('barra');
           
-          // Inicializar datos del menú si está vacío (Bootstrap)
-          if (finalUserData!.role === 'admin') {
-            const menuSnapshot = await getDocs(collection(db, 'menuItems'));
-            if (menuSnapshot.empty) {
-              const batch = writeBatch(db);
-              INITIAL_MENU.forEach(item => {
-                const ref = doc(db, 'menuItems', item.id);
-                batch.set(ref, { name: item.name, category: item.category, price: item.price, stock: item.stock });
-              });
-              INITIAL_TABLES.forEach(table => {
-                const ref = doc(db, 'tables', table.id);
-                batch.set(ref, { number: table.number, status: table.status });
-              });
-              await batch.commit();
+          if (finalUserData.role === 'admin') {
+            const { data: menuItems } = await supabase.from('menu_items').select('id').limit(1);
+            if (!menuItems || menuItems.length === 0) {
+              await supabase.from('menu_items').insert(INITIAL_MENU.map(m => ({
+                id: m.id, name: m.name, category: m.category, price: m.price, stock: m.stock
+              })));
+              await supabase.from('tables').insert(INITIAL_TABLES.map(t => ({
+                id: t.id, number: String(t.number), status: t.status
+              })));
             }
           }
           
@@ -170,22 +128,26 @@ export default function App() {
       setIsAuthReady(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!isAuthReady || !currentUser) return;
 
-    const unsubMenu = onSnapshot(collection(db, 'menuItems'), (snapshot) => {
-      setMenu(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'menuItems'));
-
-    const unsubIngredients = onSnapshot(collection(db, 'ingredients'), (snapshot) => {
-      setIngredients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ingredient)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'ingredients'));
-
-    const unsubTables = onSnapshot(collection(db, 'tables'), (snapshot) => {
-      setTables(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Table)).sort((a,b) => {
+    const fetchInitialData = async () => {
+      const [menuRes, ingRes, tablesRes, ordersRes, regRes] = await Promise.all([
+        supabase.from('menu_items').select('*'),
+        supabase.from('ingredients').select('*'),
+        supabase.from('tables').select('*'),
+        supabase.from('orders').select('*').order('timestamp', { ascending: false }),
+        supabase.from('settings').select('*').eq('id', 'register').single()
+      ]);
+      
+      if (menuRes.data) setMenu(menuRes.data as MenuItem[]);
+      if (ingRes.data) setIngredients(ingRes.data as Ingredient[]);
+      if (tablesRes.data) setTables((tablesRes.data as Table[]).sort((a,b) => {
         const numA = Number(a.number);
         const numB = Number(b.number);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
@@ -193,34 +155,52 @@ export default function App() {
         if (!isNaN(numB)) return 1;
         return String(a.number).localeCompare(String(b.number));
       }));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tables'));
+      if (ordersRes.data) setOrders(ordersRes.data as Order[]);
+      if (regRes.data) setRegisterSettings(regRes.data.data);
+    };
 
-    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-      setOrders(snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          items: data.items.map((i: string) => JSON.parse(i))
-        } as Order;
-      }).sort((a,b) => b.timestamp - a.timestamp));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'orders'));
+    fetchInitialData();
 
-    const unsubRegister = onSnapshot(doc(db, 'settings', 'register'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        setRegisterSettings(data);
-      } else {
-        setRegisterSettings(null); // Defecto: cerrado si no existe el doc
-      }
-    }, (error) => console.log('Error loading register state:', error));
+    const menuSub = supabase.channel('menu_items_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => {
+        supabase.from('menu_items').select('*').then(res => res.data && setMenu(res.data as MenuItem[]));
+      }).subscribe();
+
+    const ingSub = supabase.channel('ingredients_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredients' }, () => {
+        supabase.from('ingredients').select('*').then(res => res.data && setIngredients(res.data as Ingredient[]));
+      }).subscribe();
+
+    const tablesSub = supabase.channel('tables_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => {
+        supabase.from('tables').select('*').then(res => {
+          if (res.data) setTables((res.data as Table[]).sort((a,b) => {
+            const numA = Number(a.number);
+            const numB = Number(b.number);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            if (!isNaN(numA)) return -1;
+            if (!isNaN(numB)) return 1;
+            return String(a.number).localeCompare(String(b.number));
+          }));
+        });
+      }).subscribe();
+
+    const ordersSub = supabase.channel('orders_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        supabase.from('orders').select('*').order('timestamp', { ascending: false }).then(res => res.data && setOrders(res.data as Order[]));
+      }).subscribe();
+      
+    const settingsSub = supabase.channel('settings_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: 'id=eq.register' }, () => {
+        supabase.from('settings').select('*').eq('id', 'register').single().then(res => res.data && setRegisterSettings(res.data.data));
+      }).subscribe();
 
     return () => {
-      unsubMenu();
-      unsubIngredients();
-      unsubTables();
-      unsubOrders();
-      unsubRegister();
+      supabase.removeChannel(menuSub);
+      supabase.removeChannel(ingSub);
+      supabase.removeChannel(tablesSub);
+      supabase.removeChannel(ordersSub);
+      supabase.removeChannel(settingsSub);
     };
   }, [isAuthReady, currentUser]);
 
@@ -261,8 +241,8 @@ export default function App() {
     prevOrdersRef.current = orders;
   }, [orders, currentUser, isAuthReady]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
+    const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
   const handlePlaceOrder = async (tableId: string, items: OrderItem[], total: number) => {
@@ -276,13 +256,11 @@ export default function App() {
 
     const createOrderDoc = async (orderItems: OrderItem[], type: 'food' | 'drink') => {
       if (orderItems.length === 0) return;
-      const orderId = Math.random().toString(36).substr(2, 9);
-      const orderRef = doc(db, 'orders', orderId);
       const orderTotal = orderItems.reduce((sum, item) => sum + ((item.menuItem.price + (item.extraPrice || 0)) * item.quantity), 0);
       
-      await setDoc(orderRef, {
+      const { error } = await supabase.from('orders').insert({
         tableId,
-        items: orderItems.map(item => JSON.stringify(item)),
+        items: orderItems,
         status: 'pending',
         type,
         total: orderTotal,
@@ -291,6 +269,7 @@ export default function App() {
         waiterId: currentUser?.id,
         waiterName: currentUser?.name
       });
+      if (error) throw error;
     };
 
     try {
@@ -301,25 +280,18 @@ export default function App() {
         await createOrderDoc(drinkItems, 'drink');
       }
 
-      const batch = writeBatch(db);
-      items.forEach(orderItem => {
+      for (const orderItem of items) {
         const menuItem = menu.find(m => m.id === orderItem.menuItem.id);
         if (menuItem) {
           if (menuItem.recipe && menuItem.recipe.length > 0) {
-            // Deduct recipe ingredients
-            menuItem.recipe.forEach(recipeItem => {
+            for (const recipeItem of menuItem.recipe) {
               const ing = ingredients.find(i => i.id === recipeItem.ingredientId);
               if (ing) {
-                const ingRef = doc(db, 'ingredients', ing.id);
                 const deduction = recipeItem.quantity * orderItem.quantity;
                 const newStock = Math.max(0, ing.stock - deduction);
+                await supabase.from('ingredients').update({ stock: newStock }).eq('id', ing.id);
                 
-                batch.update(ingRef, { stock: newStock });
-
-                // Log movement
-                const movRef = doc(collection(db, 'inventoryMovements'));
-                batch.set(movRef, {
-                  id: movRef.id,
+                await supabase.from('inventory_movements').insert({
                   ingredientId: ing.id,
                   ingredientName: ing.name,
                   quantity: -deduction,
@@ -331,29 +303,21 @@ export default function App() {
                   notes: `Consumo plato: ${menuItem.name} (x${orderItem.quantity})`
                 });
               }
-            });
+            }
           } else {
-            // Fallback to simple menu stock
-            const ref = doc(db, 'menuItems', menuItem.id);
-            batch.update(ref, { stock: Math.max(0, menuItem.stock - orderItem.quantity) });
+            await supabase.from('menu_items').update({ stock: Math.max(0, menuItem.stock - orderItem.quantity) }).eq('id', menuItem.id);
           }
 
-          // Deduct selected additions
           if (orderItem.selectedAdditions && orderItem.selectedAdditions.length > 0) {
-            orderItem.selectedAdditions.forEach(addition => {
+            for (const addition of orderItem.selectedAdditions) {
               if (addition.ingredientId) {
                 const ing = ingredients.find(i => i.id === addition.ingredientId);
                 if (ing) {
-                  const ingRef = doc(db, 'ingredients', ing.id);
                   const deduction = orderItem.quantity * (addition.quantity || 1);
                   const newStock = Math.max(0, ing.stock - deduction);
-
-                  batch.update(ingRef, { stock: newStock });
-
-                  // Log movement
-                  const movRef = doc(collection(db, 'inventoryMovements'));
-                  batch.set(movRef, {
-                    id: movRef.id,
+                  await supabase.from('ingredients').update({ stock: newStock }).eq('id', ing.id);
+                  
+                  await supabase.from('inventory_movements').insert({
                     ingredientId: ing.id,
                     ingredientName: ing.name,
                     quantity: -deduction,
@@ -366,12 +330,10 @@ export default function App() {
                   });
                 }
               }
-            });
+            }
           }
         }
-      });
-      await batch.commit();
-      
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'orders');
     }
@@ -379,14 +341,14 @@ export default function App() {
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
     try {
-      const orderRef = doc(db, 'orders', orderId);
       const updateData: any = { status: newStatus };
       if (newStatus === 'preparing') {
         updateData.preparingTimestamp = Date.now();
       } else if (newStatus === 'ready') {
         updateData.readyTimestamp = Date.now();
       }
-      await updateDoc(orderRef, updateData);
+      const { error } = await supabase.from('orders').update(updateData).eq('id', orderId);
+      if (error) throw error;
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
     }
@@ -405,10 +367,9 @@ export default function App() {
   ) => {
     try {
       const activeTableOrders = orders.filter(o => o.tableId === tableId && o.status !== 'paid');
-      const batch = writeBatch(db);
+      const orderIds = activeTableOrders.map(o => o.id);
       
-      activeTableOrders.forEach(order => {
-        const ref = doc(db, 'orders', order.id);
+      if (orderIds.length > 0) {
         const updateData: any = { 
           status: 'paid', 
           paymentMethod,
@@ -419,27 +380,21 @@ export default function App() {
           isDelivery: isDelivery || false,
           deliveryCost: deliveryCost || 0
         };
-        if (referenceNumber) {
-          updateData.referenceNumber = referenceNumber;
-        }
-        batch.update(ref, updateData);
-      });
-      
-      await batch.commit();
+        if (referenceNumber) updateData.referenceNumber = referenceNumber;
+        
+        await supabase.from('orders').update(updateData).in('id', orderIds);
+      }
 
-      // Register delivery expense if applicable
       if (isDelivery && deliveryCost && deliveryCost > 0) {
-        const expenseId = Math.random().toString(36).substr(2, 9);
         const businessDate = registerSettings?.openedAt || Date.now();
-        await setDoc(doc(db, 'dailyExpenses', expenseId), {
-          id: expenseId,
+        await supabase.from('daily_expenses').insert({
           type: 'delivery',
           amount: deliveryCost,
           description: `Delivery Mesa ${tableId.replace('t', '')}`,
           timestamp: Date.now(),
           businessDate: businessDate,
           userName: currentUser?.name || 'Sistema',
-          orderId: activeTableOrders[0]?.id || ''
+          orderId: activeTableOrders[0]?.id || null
         });
       }
     } catch (error) {

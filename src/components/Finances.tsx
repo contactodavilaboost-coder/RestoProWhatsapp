@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy, doc, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc, setDoc } from '../firebase';
 import { Order, Purchase, Ingredient, DailyExpense } from '../types';
 import { DollarSign, ArrowUpRight, ArrowDownRight, Download, Calendar, ExternalLink, Trash2, X, Lock, Eye, EyeOff, ChevronDown, ChevronRight, User, Phone, MapPin, CreditCard, Truck } from 'lucide-react';
 import * as XLSX from 'xlsx';

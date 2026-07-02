@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs, writeBatch } from '../firebase';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { toast } from 'sonner';
 import { 

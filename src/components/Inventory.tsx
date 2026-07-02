@@ -25,7 +25,7 @@ import {
   EyeOff,
   AlertCircle
 } from 'lucide-react';
-import { doc, setDoc, deleteDoc, collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, query, orderBy, limit, onSnapshot } from '../firebase';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { toast } from 'sonner';
 

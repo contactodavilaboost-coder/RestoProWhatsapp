@@ -30,7 +30,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc, writeBatch, onSnapshot, deleteDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, writeBatch, onSnapshot, deleteDoc, collection, query, where, getDocs, updateDoc } from '../firebase';
 import { AnimatePresence, motion } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -268,7 +268,7 @@ export default function POS({ tables, menu, onPlaceOrder, activeOrders, onCloseT
   };
 
   const handleOpenAddTableModal = () => {
-    const nextNumber = tables.length > 0 ? Math.max(...tables.map(t => t.number)) + 1 : 1;
+    const nextNumber = tables.length > 0 ? Math.max(...tables.map(t => Number(t.number) || 0)) + 1 : 1;
     setNewTableNumber(nextNumber.toString());
     if (selectedAreaId && selectedAreaId !== 'all') {
       setNewTableAreaId(selectedAreaId);
