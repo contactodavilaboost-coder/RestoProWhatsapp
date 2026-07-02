@@ -85,6 +85,16 @@ export default function App() {
                   role: 'admin',
                   pin: '0000'
                 };
+              } else {
+                console.error("Bootstrapping admin failed", insertError);
+                toast.error(`Error DB al crear admin: ${insertError.message || JSON.stringify(insertError)}`);
+                // Allow them to enter anyway so they can use the app, we will just use the auth session
+                finalUserData = {
+                  id: session.user.id,
+                  name: displayName,
+                  role: 'admin',
+                  pin: '0000'
+                };
               }
             }
           }
