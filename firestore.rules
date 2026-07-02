@@ -1,0 +1,235 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isNumeric(val) {
+      return val is int || val is float;
+    }
+
+    function userExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isEmailBootstrappedAdmin() {
+      return isAuthenticated() && 
+             'email' in request.auth.token && 
+             (
+               request.auth.token.email == "davilacamacho@gmail.com" ||
+               request.auth.token.email == "DavilaCamacho@gmail.com" ||
+               request.auth.token.email == "veronicaarcaya2015@gmail.com" ||
+               request.auth.token.email == "equisrafael@gmail.com" ||
+               request.auth.token.email == "elvalerasmoke@gmail.com"
+             );
+    }
+
+    function getUserDataByUid() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserDataByEmail() {
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+    }
+
+    function hasUserRole(roleList) {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserDataByUid().role in roleList) ||
+        ('email' in request.auth.token && exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && getUserDataByEmail().role in roleList)
+      );
+    }
+
+    function isAdmin() {
+      return isEmailBootstrappedAdmin() || hasUserRole(['admin']);
+    }
+    
+    function isWaiter() {
+      return hasUserRole(['waiter']);
+    }
+    
+    function isChef() {
+      return hasUserRole(['chef']);
+    }
+    
+    function isBartender() {
+      return hasUserRole(['bartender']);
+    }
+    
+    function isStaff() {
+      return isEmailBootstrappedAdmin() || hasUserRole(['admin', 'waiter', 'chef', 'bartender']);
+    }
+    
+    function isUserDocOwner(userId) {
+      return isAuthenticated() && (
+        request.auth.uid == userId ||
+        ('email' in request.auth.token && request.auth.token.email == userId)
+      );
+    }
+
+    // Domain Validators
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'name', 'role']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role in ['admin', 'waiter', 'chef', 'bartender'] &&
+             (!('uid' in data) || (data.uid is string && data.uid.size() < 100)) &&
+             (!('createdAt' in data) || isNumeric(data.createdAt)) &&
+             (!('pin' in data) || (data.pin is string && data.pin.size() < 10));
+    }
+
+    function isValidMenuItem(data) {
+      return data.keys().hasAll(['name', 'category', 'price', 'stock']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() < 50 &&
+             isNumeric(data.price) && data.price >= 0 &&
+             isNumeric(data.stock) && data.stock >= 0 &&
+             (!('additions' in data) || data.additions is list) &&
+             (!('recipe' in data) || data.recipe is list);
+    }
+
+    function isValidIngredient(data) {
+      return data.keys().hasAll(['name', 'stock', 'unit', 'minStock']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.unit is string && data.unit.size() > 0 && data.unit.size() < 20 &&
+             isNumeric(data.stock) && data.stock >= 0 &&
+             isNumeric(data.minStock) && data.minStock >= 0 &&
+             (!('location' in data) || data.location in ['cocina', 'bodega', 'barra']);
+    }
+
+    function isValidMovement(data) {
+      return data.keys().hasAll(['id', 'ingredientId', 'ingredientName', 'quantity', 'type', 'prevStock', 'newStock', 'timestamp', 'userName']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.ingredientId is string && data.ingredientId.size() > 0 && data.ingredientId.size() < 100 &&
+             data.ingredientName is string && data.ingredientName.size() > 0 && data.ingredientName.size() < 100 &&
+             isNumeric(data.quantity) &&
+             data.type in ['entrada', 'salida', 'salida_plato', 'traslado_bodega_cocina', 'desecho', 'ajuste'] &&
+             isNumeric(data.prevStock) &&
+             isNumeric(data.newStock) &&
+             isNumeric(data.timestamp) &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 500));
+    }
+
+    function isValidArea(data) {
+      return data.keys().hasOnly(['name']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100;
+    }
+
+    function isValidTable(data) {
+      return data.keys().hasAll(['number', 'status']) &&
+             (isNumeric(data.number) || (data.number is string && data.number.size() > 0)) &&
+             data.status in ['available', 'occupied'] &&
+             (!('areaId' in data) || (data.areaId is string && data.areaId.size() < 100)) &&
+             (!('currentOrderId' in data) || (data.currentOrderId is string && data.currentOrderId.size() < 100));
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['tableId', 'items', 'status', 'total', 'timestamp']) &&
+             data.tableId is string && data.tableId.size() > 0 && data.tableId.size() < 50 &&
+             data.items is list && data.items.size() <= 100 &&
+             data.status in ['pending', 'preparing', 'ready', 'served', 'paid', 'unconfirmed'] &&
+             isNumeric(data.total) && data.total >= 0 &&
+             isNumeric(data.timestamp) &&
+             (!('type' in data) || data.type in ['food', 'drink']) &&
+             (!('readyTimestamp' in data) || isNumeric(data.readyTimestamp)) &&
+             (!('paymentMethod' in data) || data.paymentMethod in ['efectivo', 'tarjeta', 'pago_movil', 'transferencia', 'zelle']) &&
+             (!('referenceNumber' in data) || (data.referenceNumber is string && data.referenceNumber.size() < 100)) &&
+             (!('waiterId' in data) || (data.waiterId is string && data.waiterId.size() < 100)) &&
+             (!('waiterName' in data) || (data.waiterName is string && data.waiterName.size() < 100));
+    }
+
+    function isValidPurchase(data) {
+      return data.keys().hasAll(['id', 'supplierName', 'userName', 'totalAmount', 'timestamp', 'items']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.supplierName is string && data.supplierName.size() > 0 && data.supplierName.size() < 200 &&
+             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
+             isNumeric(data.totalAmount) && data.totalAmount >= 0 &&
+             isNumeric(data.timestamp) &&
+             (!('invoicePhoto' in data) || data.invoicePhoto is string) &&
+             data.items is list && data.items.size() <= 100;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          isUserDocOwner(userId) && request.resource.data.role != 'admin'
+        )
+      ) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isAdmin() || (
+          isUserDocOwner(userId) && request.resource.data.role == resource.data.role
+        ) || (
+          resource != null && 'uid' in resource.data && resource.data.uid == request.auth.uid && request.resource.data.role == resource.data.role
+        )
+      ) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /menuItems/{menuItemId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidMenuItem(request.resource.data);
+      allow update: if (isAdmin() || isWaiter()) && isValidMenuItem(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /tables/{tableId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isWaiter();
+      allow delete: if isAdmin();
+    }
+
+    match /areas/{areaId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff() && isValidArea(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isWaiter()) && isValidOrder(request.resource.data);
+      allow update: if isStaff() && isValidOrder(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /ingredients/{ingredientId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin() || isChef();
+      allow update: if isAdmin() || isChef() || (isStaff() && isValidIngredient(request.resource.data));
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isStaff() && isValidMovement(request.resource.data));
+      allow update, delete: if isAdmin();
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff() && isValidPurchase(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

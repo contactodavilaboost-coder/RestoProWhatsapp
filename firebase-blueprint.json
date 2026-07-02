@@ -1,0 +1,250 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access control.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's email address"
+        },
+        "name": {
+          "type": "string",
+          "description": "User's display name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "waiter", "chef"],
+          "description": "User's role in the system"
+        }
+      },
+      "required": ["email", "name", "role"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "A product available on the menu.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the product"
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the product"
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product"
+        },
+        "stock": {
+          "type": "number",
+          "description": "Current stock level"
+        },
+        "additions": {
+          "type": "array",
+          "description": "List of available additions for this menu item",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "price": { "type": "number" }
+            }
+          }
+        },
+        "recipe": {
+          "type": "array",
+          "description": "Recipe configuration with required ingredient IDs and quantities",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingredientId": { "type": "string" },
+              "quantity": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["name", "category", "price", "stock"]
+    },
+    "Ingredient": {
+      "title": "Ingredient",
+      "description": "A raw material/ingredient in the inventory.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the ingredient"
+        },
+        "stock": {
+          "type": "number",
+          "description": "Current available quantity/stock"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measurement (e.g. g, Kg, unidades, L, ml)"
+        },
+        "minStock": {
+          "type": "number",
+          "description": "Minimum threshold before triggering low-stock alert"
+        },
+        "location": {
+          "type": "string",
+          "enum": ["cocina", "bodega"],
+          "description": "Location of the ingredient"
+        }
+      },
+      "required": ["name", "stock", "unit", "minStock"]
+    },
+    "InventoryMovement": {
+      "title": "InventoryMovement",
+      "description": "A trackable change in inventory stock.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ingredientId": { "type": "string" },
+        "ingredientName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "type": {
+          "type": "string",
+          "enum": ["entrada", "salida_plato", "traslado_bodega_cocina", "desecho", "ajuste"]
+        },
+        "prevStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "userName": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ingredientId", "ingredientName", "quantity", "type", "prevStock", "newStock", "timestamp", "userName"]
+    },
+    "Table": {
+      "title": "Table",
+      "description": "A restaurant table.",
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "number",
+          "description": "Table number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "occupied"],
+          "description": "Current status of the table"
+        }
+      },
+      "required": ["number", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order.",
+      "type": "object",
+      "properties": {
+        "tableId": {
+          "type": "string",
+          "description": "ID of the table"
+        },
+        "items": {
+          "type": "array",
+          "description": "JSON stringified array of order items to bypass nested array limitations",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "preparing", "ready", "served", "paid"],
+          "description": "Current status of the order"
+        },
+        "total": {
+          "type": "number",
+          "description": "Total amount of the order"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Timestamp when the order was created"
+        },
+        "readyTimestamp": {
+          "type": "number",
+          "description": "Timestamp when the order was marked as ready"
+        },
+        "waiterId": {
+          "type": "string",
+          "description": "ID of the waiter who placed the order"
+        },
+        "waiterName": {
+          "type": "string",
+          "description": "Name of the waiter who placed the order"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["efectivo", "tarjeta", "pago_movil", "transferencia", "zelle"],
+          "description": "Payment method used for the order"
+        },
+        "referenceNumber": {
+          "type": "string",
+          "description": "Payment reference number, especially for mobile payment (pago movil)"
+        }
+      },
+      "required": ["tableId", "items", "status", "total", "timestamp"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "A record of an inventory purchase with invoice attachment and individual ingredient stock entries.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierName": { "type": "string", "description": "Supplier name" },
+        "userName": { "type": "string", "description": "User who recorded the purchase" },
+        "totalAmount": { "type": "number", "description": "Total purchase value" },
+        "timestamp": { "type": "number", "description": "Epoch timestamp" },
+        "invoicePhoto": { "type": "string", "description": "URL or base64 representation of the invoice photo" },
+        "items": {
+          "type": "array",
+          "description": "Details of ingredients bought in this purchase",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingredientId": { "type": "string" },
+              "ingredientName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "cost": { "type": "number" },
+              "location": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["id", "supplierName", "userName", "totalAmount", "timestamp", "invoicePhoto", "items"]
+    }
+  },
+  "firestore": {
+    "/purchases/{purchaseId}": {
+      "schema": { "$ref": "#/entities/Purchase" },
+      "description": "Collection of recorded ingredient purchases/invoices."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of user profiles."
+    },
+    "/menuItems/{menuItemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Collection of menu items."
+    },
+    "/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/Table" },
+      "description": "Collection of tables."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Collection of orders."
+    },
+    "/ingredients/{ingredientId}": {
+      "schema": { "$ref": "#/entities/Ingredient" },
+      "description": "Collection of raw ingredients in the inventory."
+    },
+    "/inventoryMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/InventoryMovement" },
+      "description": "Collection of trackable inventory stock changes."
+    }
+  }
+}
