@@ -48,7 +48,11 @@ function getTableName(collectionName: string) {
 
 export async function setDoc(docRef: DocRef, data: any, options?: { merge?: boolean }) {
   const tableName = getTableName(docRef.collection);
-  const payload = { id: docRef.id, ...data };
+  let payload = { id: docRef.id, ...data };
+  
+  if (tableName === 'settings') {
+    payload = { id: docRef.id, data: data };
+  }
   
   const { error } = await supabase.from(tableName).upsert(payload);
   if (error) throw error;
@@ -56,7 +60,13 @@ export async function setDoc(docRef: DocRef, data: any, options?: { merge?: bool
 
 export async function updateDoc(docRef: DocRef, data: any) {
   const tableName = getTableName(docRef.collection);
-  const { error } = await supabase.from(tableName).update(data).eq('id', docRef.id);
+  let payload = data;
+  
+  if (tableName === 'settings') {
+    payload = { data: data };
+  }
+
+  const { error } = await supabase.from(tableName).update(payload).eq('id', docRef.id);
   if (error) throw error;
 }
 
@@ -107,7 +117,8 @@ export function onSnapshot(ref: DocRef | CollectionRef | Query, callback: (snaps
         if (payload.eventType === 'DELETE') {
            callback({ exists: () => false, data: () => undefined, id: (ref as DocRef).id, ref: { collection: collectionName, id: (ref as DocRef).id } });
         } else {
-           callback({ exists: () => true, data: () => payload.new, id: payload.new.id, ref: { collection: collectionName, id: payload.new.id } });
+           const returnData = tableName === 'settings' ? payload.new.data : payload.new;
+           callback({ exists: () => true, data: () => returnData, id: payload.new.id, ref: { collection: collectionName, id: payload.new.id } });
         }
       }).subscribe();
       
@@ -234,5 +245,7 @@ export async function getDoc(docRef: DocRef) {
   if (error || !data) {
      return { exists: () => false, data: () => undefined, id: docRef.id, ref: { collection: docRef.collection, id: docRef.id } };
   }
-  return { exists: () => true, data: () => data, id: docRef.id, ref: { collection: docRef.collection, id: docRef.id } };
+  
+  const returnData = tableName === 'settings' ? data.data : data;
+  return { exists: () => true, data: () => returnData, id: docRef.id, ref: { collection: docRef.collection, id: docRef.id } };
 }

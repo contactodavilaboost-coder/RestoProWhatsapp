@@ -2,7 +2,7 @@
 
 -- 1. Users (Empleados)
 CREATE TABLE public.users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'waiter', 'chef', 'bartender')),
@@ -11,7 +11,7 @@ CREATE TABLE public.users (
 
 -- 2. Ingredients
 CREATE TABLE public.ingredients (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   stock NUMERIC NOT NULL DEFAULT 0,
   unit TEXT NOT NULL,
@@ -21,14 +21,14 @@ CREATE TABLE public.ingredients (
 
 -- 3. Suppliers
 CREATE TABLE public.suppliers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL
 );
 
 -- 4. Inventory Movements
 CREATE TABLE public.inventory_movements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "ingredientId" UUID REFERENCES public.ingredients(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY,
+  "ingredientId" TEXT REFERENCES public.ingredients(id) ON DELETE CASCADE,
   "ingredientName" TEXT NOT NULL,
   quantity NUMERIC NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('entrada', 'salida_plato', 'traslado_bodega_cocina', 'desecho', 'ajuste')),
@@ -41,7 +41,7 @@ CREATE TABLE public.inventory_movements (
 
 -- 5. Menu Items
 CREATE TABLE public.menu_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   price NUMERIC NOT NULL,
@@ -53,23 +53,23 @@ CREATE TABLE public.menu_items (
 
 -- 6. Areas
 CREATE TABLE public.areas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL
 );
 
 -- 7. Tables
 CREATE TABLE public.tables (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   number TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('available', 'occupied')),
-  "currentOrderId" UUID,
-  "areaId" UUID REFERENCES public.areas(id) ON DELETE SET NULL
+  "currentOrderId" TEXT,
+  "areaId" TEXT REFERENCES public.areas(id) ON DELETE SET NULL
 );
 
 -- 8. Orders
 CREATE TABLE public.orders (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "tableId" UUID REFERENCES public.tables(id) ON DELETE SET NULL,
+  id TEXT PRIMARY KEY,
+  "tableId" TEXT REFERENCES public.tables(id) ON DELETE SET NULL,
   items JSONB NOT NULL, -- Array of OrderItem objects
   status TEXT NOT NULL CHECK (status IN ('pending', 'preparing', 'ready', 'served', 'paid', 'unconfirmed')),
   type TEXT CHECK (type IN ('food', 'drink')),
@@ -80,7 +80,7 @@ CREATE TABLE public.orders (
   "readyTimestamp" BIGINT,
   "paymentMethod" TEXT CHECK ("paymentMethod" IN ('efectivo', 'tarjeta', 'pago_movil', 'transferencia', 'zelle')),
   "referenceNumber" TEXT,
-  "waiterId" UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  "waiterId" TEXT REFERENCES public.users(id) ON DELETE SET NULL,
   "waiterName" TEXT,
   "customerPhone" TEXT,
   "customerName" TEXT,
@@ -96,7 +96,7 @@ ALTER TABLE public.tables ADD CONSTRAINT fk_current_order FOREIGN KEY ("currentO
 
 -- 9. Purchases
 CREATE TABLE public.purchases (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   "supplierName" TEXT NOT NULL,
   "userName" TEXT NOT NULL,
   "totalAmount" NUMERIC NOT NULL,
@@ -107,14 +107,14 @@ CREATE TABLE public.purchases (
 
 -- 10. Daily Expenses
 CREATE TABLE public.daily_expenses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK (type IN ('delivery', 'otro')),
   amount NUMERIC NOT NULL,
   description TEXT NOT NULL,
   timestamp BIGINT NOT NULL,
   "businessDate" BIGINT NOT NULL,
   "userName" TEXT NOT NULL,
-  "orderId" UUID REFERENCES public.orders(id) ON DELETE SET NULL
+  "orderId" TEXT REFERENCES public.orders(id) ON DELETE SET NULL
 );
 
 -- 11. Settings (Key-Value)
