@@ -15,6 +15,7 @@ import { playKitchenBell, playWaiterBell } from './utils/audio';
 import { Toaster, toast } from 'sonner';
 import { Lock, LogOut } from 'lucide-react';
 import AdminUsers from './components/AdminUsers';
+import Customers from './components/Customers';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -505,6 +506,7 @@ export default function App() {
         )}
         {activeTab === 'inventory' && currentUser.role === 'admin' && <Inventory menu={menu} ingredients={ingredients} currentUser={currentUser} />}
         {activeTab === 'finances' && currentUser.role === 'admin' && <Finances orders={orders} ingredients={ingredients} />}
+        {activeTab === 'customers' && ['admin', 'waiter'].includes(currentUser.role) && <Customers orders={orders} />}
         {activeTab === 'administracion' && currentUser.role === 'admin' && <AdminUsers />}
       </main>
       <Toaster position="top-center" richColors />

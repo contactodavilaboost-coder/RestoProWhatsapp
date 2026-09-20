@@ -1,0 +1,82 @@
+{
+  "id": "5a6f8b9d-4e2b-11ee-be56-0242ac120002",
+  "name": "Sub-flujo: Consultar Menu",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://yitgrjblmdatksvblzdg.supabase.co/rest/v1/menu_items?select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Get Menu from Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json);\nif (!items.length) return { menu: \"El menú está vacío.\" };\nconst menu = items.map(i => `- ${i.name} ($${i.price}): ${i.category} (Disponible: ${i.stock > 0 ? \"Sí\" : \"No\"})`).join(\"\\n\");\nreturn { menu };"
+      },
+      "id": "code-1",
+      "name": "Format Menu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Menu from Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Menu from Supabase": {
+      "main": [
+        [
+          {
+            "node": "Format Menu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

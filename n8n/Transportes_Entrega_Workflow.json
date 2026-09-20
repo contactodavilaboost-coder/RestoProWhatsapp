@@ -1,0 +1,364 @@
+{
+  "name": "Transportes - Reporte de Entregas WhatsApp → Odoo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-entrega",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120001",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !$json.body.data.key.fromMe }}",
+              "value2": true
+            },
+            {
+              "value1": "={{ $json.body.data.messageType === 'imageMessage' }}",
+              "value2": true
+            }
+          ],
+          "string": [
+            {
+              "value1": "={{ $json.body.data.message.imageMessage.caption }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120002",
+      "name": "Filter Image with Caption",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [
+        180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.body.data;\nconst caption = data.message.imageMessage.caption.trim();\nconst phone = data.key.remoteJid.replace('@s.whatsapp.net', '');\nconst messageId = data.key.id;\n\n// Regex to match Odoo-like invoice patterns like INV/2026/00001 or FAC-001\nconst invoiceRegex = /([A-Z]{3,4}\\/\\d{4}\\/\\d{5}|[A-Z]{2,4}-?\\d+)/i;\nconst match = caption.match(invoiceRegex);\n\nlet invoiceRef = '';\nlet status = '';\n\nif (match) {\n  invoiceRef = match[1];\n  status = caption.replace(invoiceRef, '').trim();\n  // Clean up punctuation/spaces at the start of status\n  status = status.replace(/^[\\s,:-]+/i, '');\n} else {\n  invoiceRef = caption.split(' ')[0]; // Fallback to first word\n  status = caption.replace(invoiceRef, '').trim();\n}\n\nreturn {\n  json: {\n    invoiceRef: invoiceRef.toUpperCase(),\n    status: status || 'Entregado',\n    phone,\n    messageId,\n    caption\n  }\n};"
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120003",
+      "name": "Extract Invoice & Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://davilaboost.odoo.com/web/session/authenticate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"db\": \"davilaboost\",\n    \"login\": \"yisusdavila0@gmail.com\",\n    \"password\": \"Jack2166*\"\n  }\n}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120004",
+      "name": "Odoo Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://davilaboost.odoo.com/web/dataset/call_kw",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"model\": \"account.move\",\n    \"method\": \"search_read\",\n    \"args\": [[[\"name\", \"=\", \"{{ $('Extract Invoice & Status').item.json.invoiceRef }}\"]], [\"id\", \"name\"]],\n    \"kwargs\": { \"limit\": 1 }\n  }\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120005",
+      "name": "Buscar Factura Odoo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check_exists",
+              "leftValue": "={{ $json.result }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120006",
+      "name": "¿Existe Factura?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://evolution_api:8080/chat/getBase64FromMediaMessage/restopro",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "restopro_secret_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"key\": {\n      \"remoteJid\": \"{{ $('Extract Invoice & Status').item.json.phone }}@s.whatsapp.net\",\n      \"id\": \"{{ $('Extract Invoice & Status').item.json.messageId }}\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120007",
+      "name": "Descargar Foto Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://davilaboost.odoo.com/web/dataset/call_kw",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"model\": \"ir.attachment\",\n    \"method\": \"create\",\n    \"args\": [{\n      \"name\": \"comprobante_{{ $('Extract Invoice & Status').item.json.invoiceRef.replace('/', '_') }}.jpg\",\n      \"datas\": \"{{ $json.result.base64 }}\",\n      \"res_model\": \"account.move\",\n      \"res_id\": {{ $('Buscar Factura Odoo').item.json.result[0].id }}\n    }],\n    \"kwargs\": {}\n  }\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120008",
+      "name": "Subir Adjunto Odoo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1280,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://davilaboost.odoo.com/web/dataset/call_kw",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"call\",\n  \"params\": {\n    \"model\": \"account.move\",\n    \"method\": \"message_post\",\n    \"args\": [\n      [{{ $('Buscar Factura Odoo').item.json.result[0].id }}]\n    ],\n    \"kwargs\": {\n      \"body\": \"📦 <b>Reporte de Entrega (Transporte)</b><br/><b>Estado:</b> {{ $('Extract Invoice & Status').item.json.status }}<br/><b>Chofer:</b> +{{ $('Extract Invoice & Status').item.json.phone }}<br/><b>Fecha/Hora:</b> {{ new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' }) }}\",\n      \"message_type\": \"comment\",\n      \"subtype_xmlid\": \"mail.mt_comment\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120009",
+      "name": "Comentario Odoo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1460,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://evolution_api:8080/message/sendText/restopro",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "restopro_secret_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('Extract Invoice & Status').item.json.phone }}\",\n  \"text\": \"✅ Factura {{ $('Extract Invoice & Status').item.json.invoiceRef }} registrada como '{{ $('Extract Invoice & Status').item.json.status }}'. ¡Gracias por reportar!\"\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120010",
+      "name": "Responder Éxito",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1640,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://evolution_api:8080/message/sendText/restopro",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "restopro_secret_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $('Extract Invoice & Status').item.json.phone }}\",\n  \"text\": \"❌ La factura {{ $('Extract Invoice & Status').item.json.invoiceRef }} no fue encontrada en Odoo. Por favor verifica el número e intenta de nuevo.\"\n}",
+        "options": {}
+      },
+      "id": "f7495b9d-4e2b-11ee-be56-0242ac120011",
+      "name": "Responder Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1100,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Image with Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Image with Caption": {
+      "main": [
+        [
+          {
+            "node": "Extract Invoice & Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Invoice & Status": {
+      "main": [
+        [
+          {
+            "node": "Odoo Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Odoo Login": {
+      "main": [
+        [
+          {
+            "node": "Buscar Factura Odoo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Factura Odoo": {
+      "main": [
+        [
+          {
+            "node": "¿Existe Factura?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Existe Factura?": {
+      "main": [
+        [
+          {
+            "node": "Descargar Foto Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Foto Evolution": {
+      "main": [
+        [
+          {
+            "node": "Subir Adjunto Odoo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir Adjunto Odoo": {
+      "main": [
+        [
+          {
+            "node": "Comentario Odoo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comentario Odoo": {
+      "main": [
+        [
+          {
+            "node": "Responder Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "tags": []
+}

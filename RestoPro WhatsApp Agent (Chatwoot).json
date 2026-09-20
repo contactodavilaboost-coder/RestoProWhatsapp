@@ -1,0 +1,232 @@
+{
+  "name": "RestoPro WhatsApp Agent (Chatwoot)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "options": {}
+      },
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -48,
+        208
+      ],
+      "webhookId": "chatwoot-webhook-id-1234",
+      "id": "a2946c5d-0251-48d7-bf03-69affccf49e1"
+    },
+    {
+      "parameters": {
+        "agent": "openAiFunctionsAgent",
+        "promptType": "define",
+        "text": "Eres un mesero virtual amigable del restaurante RestoPro. Tu trabajo es atender a los clientes por WhatsApp (mediante Chatwoot), tomar sus pedidos para Delivery o Pick-up y ser muy educado.\nReglas:\n1. Siempre revisa el menú disponible usando la herramienta 'ConsultarMenu'.\n2. Si un cliente pide algo, confirma la cantidad y el precio.\n3. Pregunta el nombre del cliente, teléfono y dirección si es Delivery (si es Pickup, no hace falta dirección).\n4. Cuando el cliente confirme que su orden está lista, usa la herramienta 'EnviarPedidoSistema' para registrarlo. Diles que el cajero lo está revisando y pronto se confirmará el pago y el envío a cocina.",
+        "options": {}
+      },
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.4,
+      "position": [
+        512,
+        304
+      ],
+      "id": "b1e067cb-8635-419e-8439-f4a7d81b3b9e"
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        608,
+        512
+      ],
+      "id": "8a5ec057-5b58-4c5e-a018-c1626308a20a"
+    },
+    {
+      "parameters": {
+        "name": "ConsultarMenu",
+        "description": "Usa esta herramienta SIEMPRE que necesites saber qué vender, qué hay en el menú y sus precios.",
+        "jsCode": "return \"Hamburguesa Sencilla - $5\\nPizza Margarita - $10\";"
+      },
+      "name": "Tool: ConsultarMenu",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        752,
+        512
+      ],
+      "id": "9b1547cf-d09a-4ef6-af5c-c15651418114"
+    },
+    {
+      "parameters": {
+        "name": "EnviarPedidoSistema",
+        "description": "Usa esta herramienta SOLO cuando el cliente confirme el pedido completo con sus datos. Devuelve un string de éxito.",
+        "jsCode": "const { customerName, customerPhone, customerAddress, isDelivery, total, items } = $input.all()[0].json;\n\n// Aquí iría el código real de Firebase (firebase-admin o REST API) para crear el pedido 'unconfirmed'\nreturn `Pedido creado para ${customerName} por $${total}.`;",
+        "specifyInputSchema": true
+      },
+      "name": "Tool: EnviarPedidoSistema",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        928,
+        496
+      ],
+      "id": "8e43f26a-5253-4428-8736-0db7954f4c3d"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://tu-chatwoot.com/api/v1/accounts/1/conversations/{{$json.body.conversation.id}}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "tu_token_aqui"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"{{$json.output}}\",\n  \"message_type\": \"outgoing\"\n}",
+        "options": {}
+      },
+      "name": "Chatwoot Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1056,
+        256
+      ],
+      "id": "7131b36c-81a7-4b22-83db-8dd951a2c856"
+    },
+    {
+      "parameters": {
+        "availableInChat": true,
+        "agentName": "RestoPro",
+        "agentDescription": "Eres un mesero virtual amigable del restaurante RestoPro. Tu trabajo es atender a los clientes por WhatsApp, tomar sus pedidos para Delivery o Pick-up y ser muy educado.\nReglas:\n1. Siempre revisa el menú disponible usando la herramienta 'ConsultarMenu'.\n2. Si un cliente pide algo, confirma la cantidad y el precio.\n3. Pregunta el nombre del cliente, teléfono y dirección si es Delivery (si es Pickup, no hace falta dirección).\n4. Cuando el cliente confirme que su orden está lista, usa la herramienta 'EnviarPedidoSistema' para registrarlo. Diles que el cajero lo está revisando y pronto se confirmará el pago y el envío a cocina.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        192,
+        400
+      ],
+      "id": "9b92ff65-e78e-4e47-b4b6-366d831bb50b",
+      "name": "When chat message received",
+      "webhookId": "5efb575e-ef03-4e2e-b5c9-acca1c37dbb5"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "llama-3.1-8b-instant",
+          "mode": "list",
+          "cachedResultName": "llama-3.1-8b-instant"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        432,
+        512
+      ],
+      "id": "3033aa5f-9a35-488e-88df-edfde8aaceb8",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "5rlDuDbCIlWjZ0Ej",
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        []
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: ConsultarMenu": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: EnviarPedidoSistema": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e2f543a0-a846-4346-a541-bb04e2a4f2bd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3ced2665d62819bc8e4b91131ee9fddb676e4896c8d9937ac3dd3a3a031a4586"
+  },
+  "nodeGroups": [],
+  "id": "X0RITgaZSWRwdZXE",
+  "tags": []
+}

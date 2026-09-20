@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, ChefHat, Package, DollarSign, LogOut, Users, GlassWater, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, ChefHat, Package, DollarSign, LogOut, Users, GlassWater, Menu, X, UserCheck } from 'lucide-react';
 import { User } from '../types';
 import { useState, useEffect } from 'react';
 
@@ -20,6 +20,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
     { id: 'barra', label: 'Barra', icon: GlassWater, roles: ['admin', 'bartender'] },
     { id: 'inventory', label: 'Inventario', icon: Package, roles: ['admin'] },
     { id: 'finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
+    { id: 'customers', label: 'Clientes', icon: UserCheck, roles: ['admin', 'waiter'] },
     { id: 'administracion', label: 'Administración', icon: Users, roles: ['admin'] },
   ];
 

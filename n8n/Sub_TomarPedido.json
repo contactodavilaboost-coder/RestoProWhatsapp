@@ -1,0 +1,117 @@
+{
+  "id": "6b7f8c0e-5f3c-22ff-cf67-1353bd230003",
+  "name": "Sub-flujo: Tomar Pedido",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-2",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.all()[0].json;\nconst total = (data.items || []).reduce((sum, item) => sum + (item.price * item.quantity), 0);\nreturn {\n  status: 'unconfirmed',\n  type: 'food',\n  total: total,\n  timestamp: Date.now(),\n  customerName: data.customerName,\n  customerPhone: data.customerPhone,\n  customerAddress: data.customerAddress || null,\n  isDelivery: data.isDelivery,\n  items: data.items,\n  paymentMethod: 'efectivo'\n};"
+      },
+      "id": "code-2",
+      "name": "Format Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://yitgrjblmdatksvblzdg.supabase.co/rest/v1/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Insert Order to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { result: \"Pedido registrado exitosamente. Será verificado por el cajero.\" };"
+      },
+      "id": "code-3",
+      "name": "Success Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Order": {
+      "main": [
+        [
+          {
+            "node": "Insert Order to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Order to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
